@@ -15,7 +15,7 @@
 #   2. Fill in all substitutions: (name, GPIO pins, transmit role, ...) and
 #      esp32: (board, variant, ...) below.
 #   3. In the packages.rs485.files list, uncomment the optional packages you have
-#      (pump-vsp.yaml, heater.yaml). The bus.yaml line is REQUIRED — leave it
+#      (pump-vsp.yaml, heater.yaml, heater-dual.yaml). The bus.yaml line is REQUIRED — leave it
 #      uncommented. LED and button entries are already active; rename labels to
 #      match your load, and remove entries for gear your system doesn't have.
 #      Equipment-specific LEDs and buttons are hidden in HA by default — enable
@@ -112,8 +112,8 @@ uart:
 
 packages:
   rs485:
-    url: https://github.com/b3nj1/rs485_frame-examples
-    ref: v4.1.0          # PINNED release tag — bump deliberately to update (see README)
+    url: https://github.com/gwillmer/rs485_frame-examples
+    ref: v4.2.0          # PINNED release tag — bump deliberately to update (see README)
     refresh: 1d
     files:
       # Required package: stays uncommented.
@@ -121,7 +121,16 @@ packages:
 
       # --- Equipment: uncomment the lines for gear you have, delete the rest. ---
       # - hayward/aqualogic/pump-vsp.yaml        # Variable-speed pump — Status: tested
-      # - hayward/aqualogic/heater.yaml          # Gas/heat-pump heater — Status: tested
+      # - hayward/aqualogic/heater.yaml          # Single heater — Status: tested
+      # Dual Heater 1 + Heater 2 (Heater 2 replaces Valve 4) — Status: UNTESTED
+      # Do not include heater.yaml too. Also remove the generic bit-0/bit-14 LED entries and
+      # the Valve 4 button below; heater-dual.yaml provides dedicated entities for all three.
+      # - path: hayward/aqualogic/heater-dual.yaml
+      #   vars:
+      #     heater1_name: "Gas Heater"
+      #     heater2_name: "Heat Pump"
+      #     heater1_display_match: "Gas Heater"  # use exact text from a live 0x0103 capture
+      #     heater2_display_match: "Heat Pump"   # use exact text from a live 0x0103 capture
       # - hayward/aqualogic/diagnostics.yaml     # Diagnostic stats table + frame dump — Status: tested
 
       # --- LED indicators — rename labels to match your load; remove bits your panel lacks. ---
@@ -130,6 +139,7 @@ packages:
       #   AUX channels, valves, Service, Spillover, Super Chlorinate.
       # Bits 0-8 hardware-verified. Bits 9-25 confirmed by swilson, smith288, ChaseDurand.
       # Use the "LED Mask" diagnostic sensor to verify bit layout on your specific panel.
+      # Dual-heater users: remove this generic bit-0 entry; heater-dual.yaml owns Heater 1 activity.
       - path: hayward/aqualogic/led.yaml
         vars: { bit: 0, led_name: "Heater Active", device_class: heat }
       - path: hayward/aqualogic/led.yaml
@@ -162,6 +172,7 @@ packages:
         vars: { bit: 12, led_name: "AUX 5", device_class: running, disabled_by_default: "true" }
       - path: hayward/aqualogic/led.yaml
         vars: { bit: 13, led_name: "AUX 6", device_class: running, disabled_by_default: "true" }
+      # Dual-heater users: remove this generic bit-14 entry; the relay is Heater 2, not Valve 4.
       - path: hayward/aqualogic/led.yaml
         vars: { bit: 14, led_name: "Valve 4", device_class: running, disabled_by_default: "true" }
       - path: hayward/aqualogic/led.yaml
@@ -284,5 +295,6 @@ packages:
       #   vars: { button_name: "AUX 14", button_command: [0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02], disabled_by_default: "true" }
       - path: hayward/aqualogic/button.yaml
         vars: { button_name: "Valve 3", button_command: [0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00], disabled_by_default: "true" }
+      # Dual-heater users: remove this generic Valve 4 button; heater-dual.yaml owns Heater 2 mode.
       - path: hayward/aqualogic/button.yaml
         vars: { button_name: "Valve 4", button_command: [0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00], disabled_by_default: "true" }

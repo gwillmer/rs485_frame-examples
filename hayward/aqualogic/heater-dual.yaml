@@ -1,0 +1,155 @@
+# =============================================================================
+# Hayward AquaLogic / ProLogic — dual heater
+# -----------------------------------------------------------------------------
+# Role:        package (optional)
+# Status:      UNTESTED-draft
+# Tested on:   Not yet tested on dual-heater hardware; verify with a capture before use
+# Bus:         19200 baud, 8N2  (see bus.yaml)
+# Owns frames: [0x01,0x02] bits 0 and 14 (heater active LEDs); [0x01,0x03]
+#              heater-mode latches; sends [0x00,0x83] heater-mode commands
+# Offsets:     payload-relative — payload[0..1] = frame_type, data starts at payload[2]
+# References:  Hayward Pro Logic Installation Manual (2009), pp. 15, 25, 29-30;
+#              https://github.com/swilson/aqualogic
+#
+# Contributors:
+#   - GWillmer — dual-heater configuration and requirements
+# =============================================================================
+#
+# WARNING — UNTESTED ACTIVE TRANSMIT DRAFT
+#
+# This package has not been verified on a dual-heater controller. Heater 2 reuses
+# the Valve 4 relay/output, so do not include the generic Valve 4 LED or button
+# entries from example-device.yaml at the same time. Both mode buttons are hidden
+# in Home Assistant by default. Enable them only after comparing their payloads
+# with an OEM-button capture from your controller.
+#
+# The current command hypotheses preserve the repository's existing mappings:
+# Heater 1 uses the command from heater.yaml, and Heater 2 uses the Valve 4 command
+# from example-device.yaml. The Hayward manual confirms the Heater 2 / Valve 4
+# hardware sharing, but it does not document the RS485 command bytes.
+#
+# Optional scalar vars (all have defaults):
+#   heater1_name           Friendly Home Assistant name (for example "Gas Heater").
+#   heater2_name           Friendly Home Assistant name (for example "Heat Pump").
+#   heater1_display_match  Exact, non-empty ASCII token shown on Heater 1 mode screens.
+#   heater2_display_match  Exact, non-empty ASCII token shown on Heater 2 mode screens.
+#
+# Choose display-match values from a live [0x01,0x03] capture. They are separate
+# from the HA names because panels commonly render "Heater1" without a space and
+# may instead use configured equipment names such as "Gas Heater" / "Heat Pump".
+
+defaults:
+  heater1_name: "Heater 1"
+  heater2_name: "Heater 2"
+  heater1_display_match: "Heater1"
+  heater2_display_match: "Heater2"
+
+globals:
+  - id: g_heater1_proof_ms
+    type: uint32_t
+    initial_value: '0'
+
+  - id: g_heater2_proof_ms
+    type: uint32_t
+    initial_value: '0'
+
+rs485_frame:
+  - id: !extend pool
+    on_frame:
+      # Solid LED mask: bit 0 = Heater 1; bit 14 = Valve 4 / Heater 2.
+      - frame_type: [0x01, 0x02]
+        then:
+          - lambda: |-
+              if (payload.size() < 6) return;
+              const uint32_t mask = uint32_t(payload[2]) |
+                                    (uint32_t(payload[3]) << 8) |
+                                    (uint32_t(payload[4]) << 16) |
+                                    (uint32_t(payload[5]) << 24);
+              id(heater1_active).publish_state(bool(mask & (1UL << 0)));
+              id(heater2_active).publish_state(bool(mask & (1UL << 14)));
+
+      # Heater mode is exposed only in cycling display text. Keep an independent
+      # proof timestamp per heater so one screen cannot refresh the other's latch.
+      - frame_type: [0x01, 0x03]
+        then:
+          - lambda: |-
+              const size_t BUF_LEN = 128;
+              static char text[BUF_LEN];
+              size_t tlen = 0;
+              for (size_t i = 2; i < payload.size() && tlen < (BUF_LEN - 1); i++) {
+                const uint8_t b = payload[i] & 0x7f;
+                if (b < 0x20 || b > 0x7E) continue;
+                text[tlen++] = char(b);
+              }
+              text[tlen] = '\0';
+
+              const char *heater1_match = "${heater1_display_match}";
+              const char *heater2_match = "${heater2_display_match}";
+              const uint32_t now = millis();
+
+              if (heater1_match[0] != '\0' && strstr(text, heater1_match) != nullptr) {
+                if (strstr(text, "Auto") != nullptr) {
+                  id(heater1_auto).publish_state(true);
+                  id(g_heater1_proof_ms) = now;
+                } else if (strstr(text, "Manual Off") != nullptr) {
+                  id(heater1_auto).publish_state(false);
+                  id(g_heater1_proof_ms) = now;
+                }
+              }
+
+              if (heater2_match[0] != '\0' && strstr(text, heater2_match) != nullptr) {
+                if (strstr(text, "Auto") != nullptr) {
+                  id(heater2_auto).publish_state(true);
+                  id(g_heater2_proof_ms) = now;
+                } else if (strstr(text, "Manual Off") != nullptr) {
+                  id(heater2_auto).publish_state(false);
+                  id(g_heater2_proof_ms) = now;
+                }
+              }
+
+              if (id(g_heater1_proof_ms) != 0 &&
+                  now - id(g_heater1_proof_ms) > 60000UL) {
+                id(heater1_auto).publish_state(false);
+                id(g_heater1_proof_ms) = 0;
+              }
+              if (id(g_heater2_proof_ms) != 0 &&
+                  now - id(g_heater2_proof_ms) > 60000UL) {
+                id(heater2_auto).publish_state(false);
+                id(g_heater2_proof_ms) = 0;
+              }
+
+button:
+  - platform: rs485_frame
+    id: heater1_mode
+    rs485_frame_id: pool
+    name: "${heater1_name} Mode"
+    value: [0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00]
+    disabled_by_default: true
+
+  - platform: rs485_frame
+    id: heater2_mode
+    rs485_frame_id: pool
+    name: "${heater2_name} Mode"
+    value: [0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00]
+    disabled_by_default: true
+
+binary_sensor:
+  - platform: template
+    id: heater1_active
+    name: "${heater1_name} Active"
+    device_class: heat
+
+  - platform: template
+    id: heater2_active
+    name: "${heater2_name} Active"
+    device_class: heat
+
+  - platform: template
+    id: heater1_auto
+    name: "${heater1_name} Auto Mode"
+    device_class: heat
+
+  - platform: template
+    id: heater2_auto
+    name: "${heater2_name} Auto Mode"
+    device_class: heat
