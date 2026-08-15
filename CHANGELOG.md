@@ -9,6 +9,29 @@ All notable changes to the published configuration interface are documented here
 - **MINOR** — additive: a new package file, a new optional substitution *with a default*, a new entity.
 - **PATCH** — decoder or bug fix with no interface change.
 
+## [4.2.0] - 2026-08-15
+
+### Added
+
+- **New `hayward/aqualogic/heater-dual.yaml` optional package (UNTESTED draft).** Adds separate
+  Heater 1 / Heater 2 activity sensors, Auto-mode sensors, and mode buttons while leaving the
+  existing single-heater package and its public IDs unchanged. Heater 1 reads solid LED-mask bit 0;
+  Heater 2 provisionally reads the shared Valve 4 / Heater 2 bit 14. Optional scalar vars provide
+  independent Home Assistant names and exact display-match tokens for panels configured with names
+  such as `Gas Heater` and `Heat Pump`. Both transmit buttons are disabled by default pending a
+  dual-heater hardware capture; the Heater 2 byte array is the repository's existing Valve 4
+  command hypothesis, not a newly verified command.
+
+### Documentation
+
+- **`hayward/aqualogic/example-device.yaml`: added the dual-heater package to the complete package
+  menu.** The example documents that `heater.yaml` and `heater-dual.yaml` are mutually exclusive and
+  that dual-heater users must remove the generic bit-0, bit-14, and Valve 4 entries to avoid duplicate
+  entities for the shared output.
+- **Release pins:** bumped the Hayward package ref and every real `external_components` source pin to
+  `v4.2.0`, following the release guardrails in `CONTRIBUTING.md`. Jandy package refs remain at
+  `v4.1.0` because no Jandy package changed.
+
 ## [4.1.0] - 2026-08-09
 
 ### Added
@@ -300,6 +323,7 @@ Initial released interface. Restructured the monolithic per-controller YAMLs int
 - `generic/` discovery / sniffer / skeleton remain monolithic bootstrap tools (exempt from the
   package structure) with header notes pointing at it for real integrations.
 
+[4.2.0]: https://github.com/b3nj1/rs485_frame-examples/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/b3nj1/rs485_frame-examples/compare/v4.0.2...v4.1.0
 [4.0.2]: https://github.com/b3nj1/rs485_frame-examples/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/b3nj1/rs485_frame-examples/compare/v4.0.0...v4.0.1
